@@ -3,32 +3,28 @@ import logging
 import sqlite3
 import os
 import pandas as pd
-from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.utils.media_group import MediaGroupBuilder
 from aiohttp import web
 
+# Loglarni sozlash
 logging.basicConfig(level=logging.INFO)
 
-# ⚠️ O'ZINGIZNING HAQIQIY TOKEN VA ID-LARINGIZNI YOZING
+# O'z tokeningiz va admin IDingizni kiriting
 BOT_TOKEN = "8834151202:AAGmoLHQcLiYJY58KAonOSJ8Ph1rYCn3z-I"  
 ADMIN_IDS = [1396115927]  
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# FSM Holatlari
-class BotStates(StatesGroup):
-    START = State()
-    UPLOAD_FILE = State()
+# Baza yo'li (Render uchun /tmp/ papkasi xavfsiz)
+DB_PATH = "/tmp/database.db"
 
-# Ma'lumotlar bazasini sozlash
 def init_db():
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
@@ -42,93 +38,80 @@ def init_db():
 
 init_db()
 
-# Tugmalar
+# Menyu tugmalari (Rasm asosida)
 def get_main_keyboard(user_id):
-    buttons = []
+    buttons = [
+        [KeyboardButton(text="🎓 Kasbga yo'naltirish")],
+        [KeyboardButton(text="🎨 To'garaklar"), KeyboardButton(text="🏛️ Loyihalar")],
+        [KeyboardButton(text="🔍 Qidirish")]
+    ]
     if user_id in ADMIN_IDS:
         buttons.append([KeyboardButton(text="📥 Fayl yuklash")])
-
-    buttons.append([KeyboardButton(text="🔍 Qidirish")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
+class BotStates(StatesGroup):
+    UPLOAD_FILE = State()
+
 @dp.message(CommandStart())
-async def start_cmd(message: types.Message, state: FSMContext):
-    await state.set_state(BotStates.START)
+async def start_cmd(message: types.Message):
     await message.answer(
-        "Assalomu alaykum! Maktab maslahatchi botiga xush kelibsiz.",
+        "Assalomu alaykum! Maktab maslahatchi botiga xush kelibsiz. Kerakli bo'limni tanlang:",
         reply_markup=get_main_keyboard(message.from_user.id)
     )
 
+# Yangi menyu funksiyalari
+@dp.message(lambda msg: msg.text == "🎓 Kasbga yo'naltirish")
+async def show_career(message: types.Message):
+    await message.answer("🎓 **Kasbga yo'naltirish:** 7-9 sinf o'quvchilarini kasb-hunarga yo'naltirish, psixologik testlar va 'Prezident iqtidorli farzandlari' dasturi bo'yicha ma'lumotlar.")
+
+@dp.message(lambda msg: msg.text == "🎨 To'garaklar")
+async def show_clubs(message: types.Message):
+    await message.answer("🎨 **To'garaklar:** Madaniyat, Robototexnika, San'at, Kitobxonlik va Sport yo'nalishlari.")
+
+@dp.message(lambda msg: msg.text == "🏛️ Loyihalar")
+async def show_projects(message: types.Message):
+    await message.answer("🏛️ **Loyiha va tashabbuslar:** 'Turon teatr', 'Jadidlar izidan', 'Eco-schools' va 'Raqamli avlod' klublari faoliyati.")
+
+# Qidirish funksiyasi
+@dp.message(lambda msg: msg.text == "🔍 Qidirish")
+async def search_student(message: types.Message):
+    await message.answer("Ma'lumotlar bazasidan qidirish funksiyasi (Hozircha test rejimida).")
+
+# Fayl yuklash (Admin uchun)
 @dp.message(lambda msg: msg.text == "📥 Fayl yuklash")
 async def upload_file_start(message: types.Message, state: FSMContext):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-    await state.set_state(BotStates.UPLOAD_FILE)
-    await message.answer("Iltimos, Excel (.xlsx) faylini yuboring:")
+    if message.from_user.id in ADMIN_IDS:
+        await state.set_state(BotStates.UPLOAD_FILE)
+        await message.answer("Iltimos, Excel faylni (.xlsx) yuboring:")
 
 @dp.message(BotStates.UPLOAD_FILE)
 async def handle_docs(message: types.Message, state: FSMContext):
-    if not message.document:
-        await message.answer("Bu fayl emas. Iltimos, Excel fayl yuboring.")
-        return
-
-    file_id = message.document.file_id
-    file = await bot.get_file(file_id)
-    file_path = file.file_path
-    destination = message.document.file_name
-
-    await bot.download_file(file_path, destination)
-
-    try:
+    if message.document:
+        file_id = message.document.file_id
+        file = await bot.get_file(file_id)
+        destination = message.document.file_name
+        await bot.download_file(file.file_path, destination)
+        
         df = pd.read_excel(destination)
-
-        required_columns = ['ID', 'FISM', 'Sinf']
-        if not all(col in df.columns for col in required_columns):
-            await message.answer("Xato: Excel faylda 'ID', 'FISM', 'Sinf' ustunlari bo'lishi shart!")
-            return
-
-        conn = sqlite3.connect("database.db")
-        cursor = conn.cursor()
-
-        added_count = 0
-        skipped_count = 0
-
-        for _, row in df.iterrows():
-            s_id = str(row['ID']).strip()
-            fullname = str(row['FISM']).strip()
-            class_name = str(row['Sinf']).strip()
-            try:
-                cursor.execute("INSERT INTO students (id, fullname, class_name) VALUES (?, ?, ?)", (s_id, fullname, class_name))
-                added_count += 1
-            except sqlite3.IntegrityError:
-                cursor.execute("UPDATE students SET fullname=?, class_name=? WHERE id=?", (fullname, class_name, s_id))
-                skipped_count += 1
-
-        conn.commit()
+        conn = sqlite3.connect(DB_PATH)
+        df.to_sql('students', conn, if_exists='append', index=False)
         conn.close()
-
-        await message.answer(f"✅ Yuklash yakunlandi!\nYangi qo'shildi: {added_count}\nYangilandi: {skipped_count}")
-    except Exception as e:
-        await message.answer(f"Xatolik yuz berdi: {e}")
-    finally:
-        if os.path.exists(destination):
-            os.remove(destination)
+        
+        await message.answer("✅ Ma'lumotlar bazaga muvaffaqiyatli saqlandi!")
+        os.remove(destination)
         await state.clear()
 
-# Render uchun Veb Server (Portni eshitish qismi)
+# Render uchun Veb Server
 async def handle(request):
     return web.Response(text="Bot ishlamoqda...")
 
 async def main():
-    port = int(os.environ.get("PORT", 10000))
     app = web.Application()
     app.router.add_get('/', handle)
-
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    asyncio.create_task(site.start())
-
+    site = web.TCPSite(runner, '0.0.0.0', int(os.environ.get("PORT", 10000)))
+    await site.start()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
