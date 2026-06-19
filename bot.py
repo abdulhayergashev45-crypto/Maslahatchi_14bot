@@ -15,8 +15,8 @@ from aiohttp import web
 logging.basicConfig(level=logging.INFO)
 
 # ⚠️ O'ZINGIZNING HAQIQIY TOKEN VA ID-LARINGIZNI YOZING
-BOT_TOKEN = "7331441395:AAH3mDpe6Gf7A2mev9XF"  
-ADMIN_IDS = [5114777553]  
+BOT_TOKEN = "8834151202:AAGmoLHQcLiYJY58KAonOSJ8Ph1rYCn3z-I"  
+ADMIN_IDS = [1396115927]  
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
