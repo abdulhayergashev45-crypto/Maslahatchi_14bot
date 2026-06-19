@@ -5,8 +5,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiohttp import web
-from transliterate import to_latin
+from transliterate import translit
 
+def to_latin(text):
+    return translit(text, 'uz', reversed=True)
 # Sozlamalar
 BOT_TOKEN = "8834151202:AAGmoLHQcLiYJY58KAonOSJ8Ph1rYCn3z-I"
 DB_PATH = "school_data.db"
