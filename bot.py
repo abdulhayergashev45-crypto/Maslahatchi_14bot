@@ -1,104 +1,84 @@
 import os
-import logging
+import sqlite3
 import asyncio
-import cyrtranslit
+import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-# LOGGING
 logging.basicConfig(level=logging.INFO)
-
-# TOKEN
 TOKEN = os.getenv("TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# HOLATLAR
+# BAZANI SOZLASH
+conn = sqlite3.connect("students.db")
+cursor = conn.cursor()
+cursor.execute("""CREATE TABLE IF NOT EXISTS students 
+                  (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, info TEXT, photo_id TEXT)""")
+conn.commit()
+
 class BotStates(StatesGroup):
     waiting_for_name = State()
+    waiting_for_add_name = State()
+    waiting_for_add_info = State()
+    waiting_for_add_photo = State()
 
-# MA'LUMOTLAR BAZASI
-STUDENTS_DATA = {
-    "abduvohidov alisher": """Ism: Abduvohidov Alisher
-Sinf: 10-A
-Yutuqlari: Matematika olimpiadasi g'olibi
-Yo'nalishi: IT va Dasturlash""",
-    
-    "karimova nigora": """Ism: Karimova Nigora
-Sinf: 11-B
-Yutuqlari: "Yosh kitobxon" tanlovi ishtirokchisi
-Yo'nalishi: Filologiya""",
-    
-    "aliyev ali": """Ism: Aliyev Ali
-Sinf: 9-V
-Ijtimoiy holati: Namunali
-Qiziqishi: Robototexnika"""
-}
+# --- ADMIN FUNKSIYALARI ---
+@dp.message(Command("add"))
+async def add_student(message: types.Message, state: FSMContext):
+    await message.answer("O'quvchi ismini kiriting:")
+    await state.set_state(BotStates.waiting_for_add_name)
 
-# YORDAMCHI FUNKSIYALAR
-def normalize_text(text: str) -> str:
-    if not text:
-        return ""
-    return cyrtranslit.to_latin(text.lower()).strip()
+@dp.message(BotStates.waiting_for_add_name)
+async def add_info(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text.lower())
+    await message.answer("O'quvchi haqida ma'lumotni kiriting:")
+    await state.set_state(BotStates.waiting_for_add_info)
 
-# KLAVIATURA
-def main_menu_keyboard():
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="👤 O'quvchini qidirish")
-    builder.button(text="📌 Asosiy vazifalar")
-    builder.button(text="🛠 Asosiy funksiyalar")
-    builder.button(text="ℹ️ Bot haqida")
-    builder.adjust(2)
-    return builder.as_markup(resize_keyboard=True)
+@dp.message(BotStates.waiting_for_add_info)
+async def add_photo(message: types.Message, state: FSMContext):
+    await state.update_data(info=message.text)
+    await message.answer("O'quvchi rasmini yuboring:")
+    await state.set_state(BotStates.waiting_for_add_photo)
 
-# HANDLERLAR
+@dp.message(BotStates.waiting_for_add_photo, F.photo)
+async def save_student(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    photo_id = message.photo[-1].file_id
+    cursor.execute("INSERT INTO students (name, info, photo_id) VALUES (?, ?, ?)", 
+                   (data['name'], data['info'], photo_id))
+    conn.commit()
+    await message.answer("✅ O'quvchi bazaga qo'shildi!")
+    await state.clear()
+
+# --- FOYDALANUVCHI FUNKSIYALARI ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer(
-        "Assalomu alaykum! Maktab maslahatchisining tizimiga xush kelibsiz.",
-        reply_markup=main_menu_keyboard()
-    )
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="👤 O'quvchini qidirish")
+    builder.adjust(1)
+    await message.answer("Assalomu alaykum!", reply_markup=builder.as_markup(resize_keyboard=True))
 
 @dp.message(F.text == "👤 O'quvchini qidirish")
-async def start_search(message: types.Message, state: FSMContext):
+async def search_student(message: types.Message, state: FSMContext):
+    await message.answer("Ismni yozing:")
     await state.set_state(BotStates.waiting_for_name)
-    await message.answer("Qidirilayotgan o'quvchining ismini kiriting:")
 
 @dp.message(BotStates.waiting_for_name)
 async def process_search(message: types.Message, state: FSMContext):
-    query = normalize_text(message.text)
-    found = False
-    for name_key, info in STUDENTS_DATA.items():
-        if query in name_key:
-            await message.answer(f"🔍 Natija:\n\n{info}")
-            found = True
-            break
-            
-    # EBR qo'shilgan qism
-    if not found:
-        await message.answer(
-            "❌ Afsuski, bunday ismli o'quvchi ma'lumotlar bazasida topilmadi.\n\n"
-            "💡 Iltimos, ma'lumotlarni <b>EBR (Elektron bazasi ro'yxati)</b> orqali tekshirib ko'ring.",
-            parse_mode="HTML"
-        )
+    query = message.text.lower()
+    cursor.execute("SELECT info, photo_id FROM students WHERE name LIKE ?", ('%' + query + '%',))
+    result = cursor.fetchone()
+    
+    if result:
+        await message.answer_photo(photo=result[1], caption=f"🔍 Natija:\n\n{result[0]}")
+    else:
+        await message.answer("❌ Topilmadi. 💡 <b>EBR</b> orqali tekshiring.", parse_mode="HTML")
     await state.clear()
 
-@dp.message(F.text == "📌 Asosiy vazifalar")
-async def show_tasks(message: types.Message):
-    await message.answer("<b>Vazifalar:</b>\n\n🔹 Iqtidorli farzandlar loyihasi.\n🔹 To'garaklar nazorati.", parse_mode="HTML")
-
-@dp.message(F.text == "🛠 Asosiy funksiyalar")
-async def show_functions(message: types.Message):
-    await message.answer("<b>Funksiyalar:</b>\n\n✅ Kasbga yo'naltirish.\n✅ Grant ma'lumotlari.", parse_mode="HTML")
-
-@dp.message(F.text == "ℹ️ Bot haqida")
-async def show_info(message: types.Message):
-    await message.answer("🤖 <b>Maktab Maslahatchisi Boti v1.0</b>", parse_mode="HTML")
-
-# ISHGA TUSHIRISH
 async def main():
     await dp.start_polling(bot)
 
