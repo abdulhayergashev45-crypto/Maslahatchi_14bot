@@ -1,58 +1,73 @@
 import os
 import sqlite3
 import pandas as pd
+import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.fsm.storage.memory import MemoryStorage
+
+# Loglar
+logging.basicConfig(level=logging.INFO)
 
 TOKEN = os.getenv("TOKEN")
 bot = Bot(token=TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(storage=MemoryStorage())
 
-# Holatlar
-class BotStates(StatesGroup):
+# Baza fayli va Excel
+DB_FILE = "students.db"
+EXCEL_FILE = "Baza 2025-2026 (2).xlsx"
+
+# Baza yaratish
+def init_db():
+    if os.path.exists(EXCEL_FILE):
+        df = pd.read_excel(EXCEL_FILE)
+        conn = sqlite3.connect(DB_FILE)
+        df.to_sql('students', conn, if_exists='replace', index=False)
+        conn.close()
+        logging.info("Baza yangilandi.")
+
+init_db()
+
+# --- MENYU TUGMALARI ---
+def get_main_menu():
+    kb = [
+        [types.KeyboardButton(text="🔍 O'quvchini qidirish")],
+        [types.KeyboardButton(text="📊 Hisobot"), types.KeyboardButton(text="📁 Ijtimoiy portfel")],
+        [types.KeyboardButton(text="ℹ️ Bot haqida")]
+    ]
+    return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+class SearchStates(StatesGroup):
     waiting_for_name = State()
 
-# Menyuni qayta tiklash
-def main_menu():
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="🔍 O'quvchini qidirish")
-    builder.button(text="📊 Hisobot")
-    builder.button(text="📁 Ijtimoiy portfel")
-    builder.button(text="ℹ️ Bot haqida")
-    builder.adjust(2)
-    return builder.as_markup(resize_keyboard=True)
-
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    await message.answer("Assalomu alaykum! Maktab maslahatchisi tizimi.", reply_markup=main_menu())
+async def start(message: types.Message):
+    await message.answer("Assalomu alaykum! Maktab maslahatchisi tizimi.", reply_markup=get_main_menu())
 
 @dp.message(F.text == "🔍 O'quvchini qidirish")
-async def start_search(message: types.Message, state: FSMContext):
-    await message.answer("Iltimos, o'quvchining ismini yozing:")
-    await state.set_state(BotStates.waiting_for_name)
+async def ask_name(message: types.Message, state: FSMContext):
+    await message.answer("O'quvchining ismini yozing:", reply_markup=types.ReplyKeyboardRemove())
+    await state.set_state(SearchStates.waiting_for_name)
 
-@dp.message(BotStates.waiting_for_name)
-async def process_search(message: types.Message, state: FSMContext):
+@dp.message(SearchStates.waiting_for_name)
+async def search_student(message: types.Message, state: FSMContext):
     query = message.text.lower().strip()
+    conn = sqlite3.connect(DB_FILE)
     
-    # Baza faylini ochish
-    conn = sqlite3.connect("students.db")
-    # Jadval nomini tekshiring! Exceldan olingan jadval nomi 'students' bo'lishi shart
     try:
+        # Excel ustun nomlari aniq mos kelishi kerak
         df = pd.read_sql_query(f"SELECT * FROM students WHERE LOWER([Полное наименование]) LIKE '%{query}%'", conn)
         
         if not df.empty:
-            result_text = "👤 Topilgan natijalar:\n\n"
-            for index, row in df.iterrows():
-                result_text += f"🔹 {row['Полное наименование']} — Sinf: {row['Класс']}\n"
-            await message.answer(result_text, reply_markup=main_menu())
+            row = df.iloc[0]
+            await message.answer(f"👤 Natija: {row['Полное наименование']}\n📌 Sinf: {row['Класс']}", reply_markup=get_main_menu())
         else:
-            await message.answer("❌ Bunday ismli o'quvchi topilmadi.", reply_markup=main_menu())
+            await message.answer("❌ Bunday ismli o'quvchi topilmadi.", reply_markup=get_main_menu())
     except Exception as e:
-        await message.answer(f"⚠️ Xatolik yuz berdi: {e}")
+        await message.answer("⚠️ Xatolik yuz berdi.", reply_markup=get_main_menu())
+        logging.error(e)
     
     conn.close()
     await state.clear()
