@@ -12,7 +12,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 logging.basicConfig(level=logging.INFO)
 
 # Tokenni Render'dagi Environment o'zgaruvchisidan oling
-TOKEN = os.getenv("TOKEN")
+TOKEN = "8834151202:AAHrHvBuxYmGfFeiNH0Wv6uiVqU6v0WF2v0"
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
