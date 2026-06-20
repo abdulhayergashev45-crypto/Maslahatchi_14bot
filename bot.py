@@ -11,9 +11,8 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 # LOGGING
 logging.basicConfig(level=logging.INFO)
 
-# TOKEN (Render'da 'TOKEN' nomli Environment Variable qo'shishni unutmang)
+# TOKEN
 TOKEN = os.getenv("TOKEN")
-
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
@@ -77,8 +76,14 @@ async def process_search(message: types.Message, state: FSMContext):
             await message.answer(f"🔍 Natija:\n\n{info}")
             found = True
             break
+            
+    # EBR qo'shilgan qism
     if not found:
-        await message.answer("❌ O'quvchi topilmadi.")
+        await message.answer(
+            "❌ Afsuski, bunday ismli o'quvchi ma'lumotlar bazasida topilmadi.\n\n"
+            "💡 Iltimos, ma'lumotlarni <b>EBR (Elektron bazasi ro'yxati)</b> orqali tekshirib ko'ring.",
+            parse_mode="HTML"
+        )
     await state.clear()
 
 @dp.message(F.text == "📌 Asosiy vazifalar")
