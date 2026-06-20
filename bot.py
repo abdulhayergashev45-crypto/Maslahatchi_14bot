@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-TOKEN = "TOKENINGIZNI_SHU_YERGA_YAZING"
+TOKEN = "8834151202:AAGTutkCNqJk2_fONKYq_BtOmA8DMbZFMdQ"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
