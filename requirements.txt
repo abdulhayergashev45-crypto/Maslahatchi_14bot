@@ -1,5 +1,2 @@
-aiogram==3.13.1
-pandas==2.2.2
-openpyxl==3.1.5
-aiohttp==3.10.5
-transliterate
+aiogram
+cyrtranslit
