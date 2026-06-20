@@ -14,7 +14,7 @@ TOKEN = os.getenv("TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# --- BAZA ---
+# --- BAZA (SAQLANIB QOLDI) ---
 conn = sqlite3.connect("students.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""CREATE TABLE IF NOT EXISTS students 
@@ -23,7 +23,7 @@ conn.commit()
 
 # --- HOLATLAR ---
 class BotStates(StatesGroup):
-    waiting_for_name = State() # Qidiruv uchun
+    waiting_for_name = State()
     add_name = State()
     add_info = State()
     add_photo = State()
@@ -44,11 +44,11 @@ def main_menu():
 async def cmd_start(message: types.Message):
     await message.answer("Assalomu alaykum! Maktab maslahatchisi tizimi.", reply_markup=main_menu())
 
-# QIDIRUV
+# QIDIRUV (SQLITE)
 @dp.message(F.text == "🔍 O'quvchini qidirish")
 async def start_search(message: types.Message, state: FSMContext):
     await state.set_state(BotStates.waiting_for_name)
-    await message.answer("Ismni yozing:")
+    await message.answer("O'quvchining ismini yozing:")
 
 @dp.message(BotStates.waiting_for_name)
 async def process_search(message: types.Message, state: FSMContext):
@@ -56,9 +56,10 @@ async def process_search(message: types.Message, state: FSMContext):
     cursor.execute("SELECT info, photo_id FROM students WHERE LOWER(name) LIKE ?", ('%' + query + '%',))
     result = cursor.fetchone()
     if result:
+        # result[0] - info, result[1] - photo_id
         await message.answer_photo(photo=result[1], caption=f"👤 Natija:\n\n{result[0]}")
     else:
-        await message.answer("❌ Topilmadi.")
+        await message.answer("❌ Bunday ismli o'quvchi topilmadi.")
     await state.clear()
 
 # O'QUVCHI QO'SHISH (/add)
@@ -89,14 +90,8 @@ async def save_student(message: types.Message, state: FSMContext):
     await message.answer("✅ Muvaffaqiyatli qo'shildi!")
     await state.clear()
 
-# MENYU TUGMALARI
-@dp.message(F.text.in_({"📊 Hisobot", "📁 Ijtimoiy portfel", "ℹ️ Bot haqida"}))
-async def menu_responses(message: types.Message):
-    await message.answer(f"Siz {message.text} bo'limini tanladingiz (tez orada ishga tushadi).")
-
 # --- KEEP-ALIVE ---
-async def handle(request):
-    return web.Response(text="Bot is running!")
+async def handle(request): return web.Response(text="Bot is running!")
 
 async def main():
     app = web.Application()
