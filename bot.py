@@ -22,9 +22,9 @@ class BotStates(StatesGroup):
 # 3. MA'LUMOTLAR BAZASI (NAMUNA)
 # Bu yerga o'quvchilarni qo'shib chiqasiz. Kalit so'z har doim lotin kichik harflarida bo'lsin.
 STUDENTS_DATA = {
-    "abduvohidov alisher": "Ism: Abduvohidov Alisher\nSinf: 10-A\nYutuqlari: Matematika olimpiadasi g'olibi\nYo'nalishi: IT va Dasturlash",
-    "karimova nigora": "Ism: Karimova Nigora\nSinf: 11-B\nYutuqlari: "Yosh kitobxon" tanlovi ishtirokchisi\nYo'nalishi: Filologiya",
-    "aliyev ali": "Ism: Aliyev Ali\nSinf: 9-V\nIjtimoiy holati: Namunali\nQiziqishi: Robototexnika"
+    'abduvohidov alisher': 'Ism: Abduvohidov Alisher\nSinf: 10-A\nYutuqlari: Matematika olimpiadasi g'olibi\nYo'nalishi: IT va Dasturlash',
+    'karimova nigora': 'Ism: Karimova Nigora\nSinf: 11-B\nYutuqlari: 'Yosh kitobxon' tanlovi ishtirokchisi\nYo'nalishi: Filologiya',
+    'aliyev ali': 'Ism: Aliyev Ali\nSinf: 9-V\nIjtimoiy holati: Namunali\nQiziqishi: Robototexnika'
 }
 
 # 4. YORDAMCHI FUNKSIYALAR
