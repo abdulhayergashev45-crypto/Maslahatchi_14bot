@@ -17,7 +17,7 @@ from telegram.constants import ParseMode
 import anthropic
 
 # ─── SOZLAMALAR ────────────────────────────────────────────────────────────────
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
+BOT_TOKEN = "8834151202:AAGCOWr4FswvIGIWQJbmGHcYRTwVerSvxkA"
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_KEY")
 ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "123456789").split(",")))
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
