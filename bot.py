@@ -19,7 +19,7 @@ import anthropic
 # ─── SOZLAMALAR ────────────────────────────────────────────────────────────────
 BOT_TOKEN = "8834151202:AAGCOWr4FswvIGIWQJbmGHcYRTwVerSvxkA"
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_KEY")
-ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "1396115927").split(",")))
+ADMIN_IDS = "1396115927"
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
 
 # ─── CONVERSATION STATES ───────────────────────────────────────────────────────
