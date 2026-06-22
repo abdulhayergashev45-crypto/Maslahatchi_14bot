@@ -1,12 +1,3 @@
-"""
-Maktab Maslahatchisi Telegram Bot
-- 4 asosiy menyu
-- O'quvchi profili boshqaruvi
-- Claude AI orqali ijtimoiy portfel
-- SQLite + Google Sheets saqlash
-- 24/7 ishlash
-"""
-
 import asyncio
 import logging
 import os
