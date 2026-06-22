@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import logging
+import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -10,12 +11,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 # Loglar
 logging.basicConfig(level=logging.INFO)
 
-# Tokenni muhit o'zgaruvchisidan olish
-TOKEN = os.getenv("TOKEN")
+# TOKENni shu yerga kiriting (xavfsizlik uchun .env ishlatish tavsiya etiladi)
+TOKEN = "8834151202:AAGCOWr4FswvIGIWQJbmGHcYRTwVerSvxkA" 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-# Excel fayl nomi
 EXCEL_FILE = "Baza 2025-2026 (2).xlsx"
 
 class Search(StatesGroup):
@@ -41,9 +41,19 @@ async def ask_name(message: types.Message, state: FSMContext):
 async def find_student(message: types.Message, state: FSMContext):
     query = message.text.lower().strip()
     
+    if not os.path.exists(EXCEL_FILE):
+        await message.answer("⚠️ Xatolik: Baza fayli topilmadi!")
+        await state.clear()
+        return
+
     try:
         df = pd.read_excel(EXCEL_FILE)
-        # Ismni qidirish (ustun nomi aniq bo'lishi kerak, masalan: 'Полное наименование')
+        # Ustun nomlari borligini tekshirish
+        if 'Полное наименование' not in df.columns or 'Класс' not in df.columns:
+            await message.answer("⚠️ Xatolik: Excel fayldagi ustun nomlari mos kelmayapti.")
+            await state.clear()
+            return
+
         result = df[df['Полное наименование'].astype(str).str.contains(query, case=False, na=False)]
         
         if not result.empty:
@@ -55,7 +65,7 @@ async def find_student(message: types.Message, state: FSMContext):
             await message.answer("❌ Bunday ismli o'quvchi topilmadi.", reply_markup=main_menu())
     except Exception as e:
         logging.error(f"Xatolik: {e}")
-        await message.answer("⚠️ Ma'lumotlar bazasida xatolik yuz berdi.", reply_markup=main_menu())
+        await message.answer("⚠️ Ma'lumotlarni o'qishda xatolik yuz berdi.", reply_markup=main_menu())
     
     await state.clear()
 
@@ -63,5 +73,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
