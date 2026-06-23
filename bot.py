@@ -1,12 +1,3 @@
-"""
-Maktab Maslahatchisi Telegram Bot
-- 4 asosiy menyu
-- O'quvchi profili boshqaruvi
-- Claude AI orqali ijtimoiy portfel
-- SQLite + Google Sheets saqlash
-- 24/7 ishlash
-"""
-
 import asyncio
 import logging
 import os
@@ -767,9 +758,16 @@ async def main_menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return MAIN_MENU
 
 # ─── BOTNI ISHGA TUSHIRISH ─────────────────────────────────────────────────────
+import asyncio
+import sys
+
 def main():
     init_db()
     logger.info("🚀 Bot ishga tushmoqda...")
+    
+    # Python 3.12+ da event loop muammosini hal qilish
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -815,6 +813,7 @@ def main():
     app.run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True,
+        close_loop=False,
     )
 
 if __name__ == "__main__":
