@@ -3,3 +3,4 @@ anthropic>=0.40.0
 gspread==6.1.2
 google-auth==2.35.0
 google-auth-oauthlib==1.2.1
+goole-generativeai
