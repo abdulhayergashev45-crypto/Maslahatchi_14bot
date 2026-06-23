@@ -1,0 +1,23 @@
+[Unit]
+Description=Maktab Maslahatchisi Telegram Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/maktab_bot
+EnvironmentFile=/home/ubuntu/maktab_bot/.env
+ExecStart=/usr/bin/python3 /home/ubuntu/maktab_bot/bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=maktab-bot
+
+# Crash bo'lsa 10 soniyadan keyin qayta ishga tushiradi
+StartLimitInterval=200
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
