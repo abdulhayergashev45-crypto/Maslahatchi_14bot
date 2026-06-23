@@ -102,7 +102,7 @@ def get_db():
 
 # ─── CLAUDE AI ─────────────────────────────────────────────────────────────────
 def get_claude():
-    return gemini(api_key=GEMINI_API_KEY)
+    return anthropic.Anthropic(api_key=GEMINI_API_KEY)
 
 def generate_portfolio(student_name: str, cls: str, student_data: list) -> str:
     client = get_claude()
