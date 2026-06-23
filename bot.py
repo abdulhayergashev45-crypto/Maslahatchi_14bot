@@ -1,10 +1,4 @@
-cat > /home/claude/maktab_bot_v6.py << 'ENDOFFILE'
-"""
-Maktab Maslahatchisi Bot - v6
-- Claude o'chirildi, hamma AI funksiyalar Gemini ga o'tkazildi
-- import anthropic o'chirildi
-- CLAUDE_API_KEY o'chirildi
-"""
+
 
 import asyncio
 import logging
