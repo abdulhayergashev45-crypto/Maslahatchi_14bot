@@ -27,7 +27,7 @@ import anthropic
 
 # ─── SOZLAMALAR ────────────────────────────────────────────────────────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_KEY")
 ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "123456789").split(",")))
 
 # ─── STATES ────────────────────────────────────────────────────────────────────
@@ -57,13 +57,13 @@ def init_db():
     c = conn.cursor()
     c.executescript("""
         CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY GEMINI,
             full_name TEXT NOT NULL,
             class_name TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS student_media (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY GEMINI,
             student_id INTEGER REFERENCES students(id),
             media_type TEXT,
             content TEXT,
@@ -71,21 +71,21 @@ def init_db():
             added_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS clubs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY GEMINI,
             name TEXT NOT NULL,
             direction TEXT,
             responsible TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS club_members (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY GEMINI,
             club_id INTEGER REFERENCES clubs(id),
             student_id INTEGER REFERENCES students(id),
             joined_at TEXT DEFAULT (datetime('now')),
             UNIQUE(club_id, student_id)
         );
         CREATE TABLE IF NOT EXISTS achievements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY GEMINI,
             student_id INTEGER REFERENCES students(id),
             title TEXT,
             achievement_type TEXT,
@@ -102,7 +102,7 @@ def get_db():
 
 # ─── CLAUDE AI ─────────────────────────────────────────────────────────────────
 def get_claude():
-    return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    return gemini(api_key=GEMINI_API_KEY)
 
 def generate_portfolio(student_name: str, cls: str, student_data: list) -> str:
     client = get_claude()
@@ -170,7 +170,7 @@ def ask_claude_guide(question: str, context_menu: str) -> str:
 
 BOT BUYRUQLARI:
 • /start — botni ishga tushirish
-• /add_media <ID> — o'quvchiga ma'lumot qo'shish, keyin /done
+• /add_media <ISM> — o'quvchiga ma'lumot qo'shish, keyin /done
 • /add_togarak <nom> — to'garak qo'shish
 • /hisobot — umumiy hisobot
 
@@ -221,7 +221,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"*Tez foydalanish:*\n"
         f"• O'quvchi qo'shish → 👨‍🎓\n"
         f"• To'garak → `/add_togarak Robototexnika`\n"
-        f"• Ma'lumot → `/add_media <ID>`\n"
+        f"• Ma'lumot → `/add_media <ISM>`\n"
         f"• Portfel → 📋\n"
         f"• Hisobot → 📊",
         parse_mode=ParseMode.MARKDOWN,
