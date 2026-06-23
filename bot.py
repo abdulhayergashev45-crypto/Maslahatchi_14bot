@@ -194,7 +194,7 @@ def main_keyboard():
         [KeyboardButton("🎭 To'garaklar va yo'nalishlar"), KeyboardButton("🎯 Kasb yo'naltirish")],
         [KeyboardButton("📋 Portfel yaratish"), KeyboardButton("❓ AI maslahat")]
     ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, persistent=True)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
