@@ -57,13 +57,13 @@ def init_db():
     c = conn.cursor()
     c.executescript("""
         CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY GEMINI,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             full_name TEXT NOT NULL,
             class_name TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS student_media (
-            id INTEGER PRIMARY KEY GEMINI,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER REFERENCES students(id),
             media_type TEXT,
             content TEXT,
@@ -71,21 +71,21 @@ def init_db():
             added_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS clubs (
-            id INTEGER PRIMARY KEY GEMINI,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             direction TEXT,
             responsible TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS club_members (
-            id INTEGER PRIMARY KEY GEMINI,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             club_id INTEGER REFERENCES clubs(id),
             student_id INTEGER REFERENCES students(id),
             joined_at TEXT DEFAULT (datetime('now')),
             UNIQUE(club_id, student_id)
         );
         CREATE TABLE IF NOT EXISTS achievements (
-            id INTEGER PRIMARY KEY GEMINI,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER REFERENCES students(id),
             title TEXT,
             achievement_type TEXT,
