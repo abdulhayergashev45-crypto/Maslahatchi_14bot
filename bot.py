@@ -1,9 +1,9 @@
+cat > /home/claude/maktab_bot_v6.py << 'ENDOFFILE'
 """
-Maktab Maslahatchisi Bot - v5
-Yangiliklar:
-- Gemini AI universitetlar ma'lumoti (kirish ballari, kontrakt, yo'nalishlar)
-- Foydalanuvchi xabarlari ko'rinmaydigan (InlineKeyboard orqali)
-- 401 xato hal qilindi (to'g'ri API key sozlamasi)
+Maktab Maslahatchisi Bot - v6
+- Claude o'chirildi, hamma AI funksiyalar Gemini ga o'tkazildi
+- import anthropic o'chirildi
+- CLAUDE_API_KEY o'chirildi
 """
 
 import asyncio
@@ -23,12 +23,10 @@ from telegram.ext import (
     ContextTypes, filters, ConversationHandler
 )
 from telegram.constants import ParseMode
-import anthropic
 
 # ─── SOZLAMALAR ────────────────────────────────────────────────────────────────
 BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
-CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "YOUR_CLAUDE_KEY")   # Claude uchun
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_KEY")   # Gemini uchun
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_KEY")
 ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "123456789").split(",")))
 
 # Gemini sozlash
@@ -106,12 +104,8 @@ def init_db():
 def get_db():
     return sqlite3.connect(DB_PATH)
 
-# ─── CLAUDE AI ─────────────────────────────────────────────────────────────────
-def get_claude():
-    return anthropic.Anthropic(api_key=CLAUDE_API_KEY)
-
+# ─── GEMINI AI — BARCHA FUNKSIYALAR ───────────────────────────────────────────
 def generate_portfolio(student_name: str, cls: str, student_data: list) -> str:
-    client = get_claude()
     data_text = "\n".join([
         f"[{d['added_at'][:10]}] {d['media_type'].upper()}: {d['content']}"
         + (f" | Izoh: {d['caption']}" if d['caption'] else "")
@@ -150,29 +144,23 @@ Portfelni O'zbek tilida professional tarzda yozing:
 📊 MASLAHATCHI XULOSASI
 [Professional baho]
 ━━━━━━━━━━━━━━━━━━━━━━━━"""
-    message = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return message.content[0].text
+    response = gemini_model.generate_content(prompt)
+    return response.text
+
 
 def generate_report(report_type: str, data: dict) -> str:
-    client = get_claude()
     prompt = f"""Siz maktab maslahatchisisiz. Quyidagi ma'lumotlar asosida {report_type} hisobotini O'zbek tilida tayyorlang.
 
 Ma'lumotlar:
 {data}
 
 Hisobotni professional va tartibli qiling. Statistika, tahlil va tavsiyalar bering."""
-    message = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return message.content[0].text
+    response = gemini_model.generate_content(prompt)
+    return response.text
+
 
 def ask_claude_guide(question: str, context_menu: str) -> str:
-    client = get_claude()
-    system = f"""Siz maktab maslahatchisi botining aqlli yordamchisisiz. O'zbek tilida aniq va foydali javob bering.
+    prompt = f"""Siz maktab maslahatchisi botining aqlli yordamchisisiz. O'zbek tilida aniq va foydali javob bering.
 
 BOT BUYRUQLARI:
 • /start — botni ishga tushirish
@@ -190,17 +178,14 @@ MENYULAR:
 📊 Hisobot → umumiy/o'quvchi/to'garak hisobot
 
 Hozirgi menyu: {context_menu}
-Qisqa, aniq, emoji bilan javob bering."""
-    message = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=800,
-        system=system,
-        messages=[{"role": "user", "content": question}]
-    )
-    return message.content[0].text
+Qisqa, aniq, emoji bilan javob ber.
 
-# ─── GEMINI AI — UNIVERSITETLAR ───────────────────────────────────────────────
+Savol: {question}"""
+    response = gemini_model.generate_content(prompt)
+    return response.text
+
+
 async def get_university_info_gemini(university_name: str) -> str:
-    """Gemini orqali O'zbekiston universiteti haqida batafsil ma'lumot oladi"""
     prompt = f"""O'zbekistondagi "{university_name}" universiteti haqida quyidagi ma'lumotni o'zbek tilida ber:
 
 1. 📍 Joylashuv va qisqacha tarix (2-3 gap)
@@ -212,9 +197,8 @@ async def get_university_info_gemini(university_name: str) -> str:
 5. 📋 Qabul shartlari (DTM, IELTS, sertifikat)
 6. 🌐 Rasmiy veb-sayt
 
-Faqat o'zbek tilida yoz. Qisqa, aniq, emoji bilan. 
+Faqat o'zbek tilida yoz. Qisqa, aniq, emoji bilan.
 Agar aniq ma'lumot yo'q bo'lsa, taxminiy ko'rsatma ber va "(taxminiy)" deb belgilab qo'y."""
-
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(
         None,
@@ -223,7 +207,7 @@ Agar aniq ma'lumot yo'q bo'lsa, taxminiy ko'rsatma ber va "(taxminiy)" deb belgi
     return response.text
 
 
-# O'zbekiston universitetlari ro'yxati — inline tugmalar uchun
+# O'zbekiston universitetlari ro'yxati
 UZBEK_UNIVERSITIES = [
     ("🏛 TDTU", "Toshkent Davlat Texnika Universiteti"),
     ("🎓 NUUz", "O'zbekiston Milliy Universiteti"),
@@ -263,7 +247,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     user = update.effective_user
     await update.message.reply_text(
-        f"🏫 *Maktab Maslahatchisi Bot* v5\n\n"
+        f"🏫 *Maktab Maslahatchisi Bot* v6\n\n"
         f"Assalomu alaykum, *{user.first_name}*! 👋\n\n"
         f"*Tez foydalanish:*\n"
         f"• O'quvchi qo'shish → 👨‍🎓\n"
@@ -298,8 +282,7 @@ async def add_student_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_student_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["new_student_name"] = update.message.text.strip()
     await update.message.reply_text(
-        f"✅ Ism: *{context.user_data['new_student_name']}*\n\n"
-        f"Sinfini kiriting:\n_(9-A, 10-B, 11-V ...)_",
+        f"✅ Ism: *{context.user_data['new_student_name']}*\n\nSinfini kiriting:\n_(9-A, 10-B, 11-V ...)_",
         parse_mode=ParseMode.MARKDOWN
     )
     return ADD_STUDENT_CLASS
@@ -363,7 +346,7 @@ async def show_student_profile(update: Update, context: ContextTypes.DEFAULT_TYP
     mc = c.fetchone()[0]
     c.execute("SELECT COUNT(*) FROM achievements WHERE student_id=?", (sid,))
     ac = c.fetchone()[0]
-    c.execute("""SELECT cl.name FROM clubs cl 
+    c.execute("""SELECT cl.name FROM clubs cl
                  JOIN club_members cm ON cl.id=cm.club_id WHERE cm.student_id=?""", (sid,))
     clubs = [r[0] for r in c.fetchall()]
     conn.close()
@@ -544,8 +527,7 @@ async def clubs_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("❓ Qanday foydalanaman?", callback_data="ai_help_clubs")],
     ]
     await update.message.reply_text(
-        "🎭 *TO'GARAKLAR VA YO'NALISHLAR*\n\n"
-        "Tez qo'shish: `/add_togarak <nom>`",
+        "🎭 *TO'GARAKLAR VA YO'NALISHLAR*\n\nTez qo'shish: `/add_togarak <nom>`",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -714,55 +696,39 @@ async def career_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎯 *KASB YO'NALTIRISH*", parse_mode=ParseMode.MARKDOWN,
                                      reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ─── UNIVERSITETLAR — GEMINI AI ───────────────────────────────────────────────
+# ─── UNIVERSITETLAR ───────────────────────────────────────────────────────────
 async def universities_info_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Universitetlar ro'yxatini InlineKeyboard sifatida ko'rsatadi"""
     q = update.callback_query; await q.answer()
-
     keyboard = []
     for label, full_name in UZBEK_UNIVERSITIES:
         if full_name == "__custom__":
             keyboard.append([InlineKeyboardButton(label, callback_data="uni_custom")])
         else:
-            # callback_data uchun indeks ishlatamiz (uzun nom sig'maydi)
             idx = UZBEK_UNIVERSITIES.index((label, full_name))
             keyboard.append([InlineKeyboardButton(label, callback_data=f"uni_sel_{idx}")])
-
     keyboard.append([InlineKeyboardButton("🔙 Orqaga", callback_data="career_back")])
-
     await q.message.edit_text(
-        "🏫 *TOP UNIVERSITETLAR*\n\n"
-        "Qaysi universitet haqida ma'lumot olmoqchisiz?",
+        "🏫 *TOP UNIVERSITETLAR*\n\nQaysi universitet haqida ma'lumot olmoqchisiz?",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def uni_selected_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Tanlangan universitet haqida Gemini AI dan ma'lumot oladi"""
     q = update.callback_query; await q.answer()
-
     idx = int(q.data.split("_")[-1])
     label, uni_name = UZBEK_UNIVERSITIES[idx]
-
-    # Loading xabari
     await q.message.edit_text(
-        f"⏳ *{uni_name}* haqida ma'lumot qidirilmoqda...\n\n"
-        f"_Gemini AI javob tayyorlamoqda..._",
+        f"⏳ *{uni_name}* haqida ma'lumot qidirilmoqda...\n\n_Gemini AI javob tayyorlamoqda..._",
         parse_mode=ParseMode.MARKDOWN
     )
-
     try:
         info = await get_university_info_gemini(uni_name)
-
+        if len(info) > 3800:
+            info = info[:3800] + "\n\n_...Ma'lumot qisqartirildi._"
         keyboard = [
             [InlineKeyboardButton("🔙 Universitetlar ro'yxati", callback_data="universities_info")],
             [InlineKeyboardButton("🏠 Bosh menyu", callback_data="career_back")],
         ]
-
-        # Telegram 4096 belgi chegarasi — kesilsa qisqartirish
-        if len(info) > 3800:
-            info = info[:3800] + "\n\n_...Ma'lumot qisqartirildi._"
-
         await q.message.edit_text(
             f"🏛 *{uni_name}*\n\n{info}",
             parse_mode=ParseMode.MARKDOWN,
@@ -772,13 +738,11 @@ async def uni_selected_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Gemini xato: {e}")
         keyboard = [[InlineKeyboardButton("🔙 Orqaga", callback_data="universities_info")]]
         await q.message.edit_text(
-            f"❌ Ma'lumot olishda xato yuz berdi.\n\n"
-            f"Iltimos, qaytadan urinib ko'ring.",
+            "❌ Ma'lumot olishda xato yuz berdi.\n\nIltimos, qaytadan urinib ko'ring.",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
 async def uni_custom_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Foydalanuvchi o'zi universitet nomini yozadi"""
     q = update.callback_query; await q.answer()
     context.user_data["awaiting_uni_search"] = True
     await q.message.edit_text(
@@ -789,10 +753,7 @@ async def uni_custom_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return UNI_SEARCH
 
 async def uni_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Foydalanuvchi yozgan universitet nomini Gemini ga yuboradi"""
     text = update.message.text.strip()
-
-    # Menyu tugmalarini tekshirish
     menu_buttons = [
         "👨‍🎓 O'quvchilar boshqaruvi", "🏆 Yutuq va olimpiadalar",
         "🎭 To'garaklar va yo'nalishlar", "🎯 Kasb yo'naltirish",
@@ -801,17 +762,13 @@ async def uni_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if text in menu_buttons:
         context.user_data.pop("awaiting_uni_search", None)
         return await main_menu_router(update, context)
-
     msg = await update.message.reply_text(
-        f"⏳ *{text}* haqida ma'lumot qidirilmoqda...",
-        parse_mode=ParseMode.MARKDOWN
+        f"⏳ *{text}* haqida ma'lumot qidirilmoqda...", parse_mode=ParseMode.MARKDOWN
     )
-
     try:
         info = await get_university_info_gemini(text)
         if len(info) > 3800:
             info = info[:3800] + "\n\n_...Ma'lumot qisqartirildi._"
-
         keyboard = [[InlineKeyboardButton("🏫 Boshqa universitetlar", callback_data="universities_info")]]
         await msg.edit_text(
             f"🏛 *{text}*\n\n{info}",
@@ -821,7 +778,6 @@ async def uni_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"Gemini xato: {e}")
         await msg.edit_text("❌ Ma'lumot olishda xato. Qaytadan urinib ko'ring.")
-
     context.user_data.pop("awaiting_uni_search", None)
     return MAIN_MENU
 
@@ -846,7 +802,6 @@ async def generate_portfolio_handler(update: Update, context: ContextTypes.DEFAU
                     "❓ Yordam va AI maslahat","📊 Hisobot","🏠 Bosh menyu"]
     if text in menu_buttons:
         return await main_menu_router(update, context)
-
     conn = get_db(); c = conn.cursor()
     if text.isdigit():
         c.execute("SELECT id,full_name,class_name FROM students WHERE id=?", (int(text),))
@@ -895,14 +850,12 @@ async def report_general(update: Update, context: ContextTypes.DEFAULT_TYPE):
     c.execute("SELECT COUNT(*) FROM club_members"); total_members = c.fetchone()[0]
     c.execute("SELECT class_name, COUNT(*) as cnt FROM students GROUP BY class_name ORDER BY cnt DESC LIMIT 5")
     top_classes = c.fetchall()
-    c.execute("""SELECT s.full_name, COUNT(a.id) as cnt FROM students s 
+    c.execute("""SELECT s.full_name, COUNT(a.id) as cnt FROM students s
                  JOIN achievements a ON s.id=a.student_id GROUP BY s.id ORDER BY cnt DESC LIMIT 5""")
     top_students = c.fetchall()
     conn.close()
-
     classes_text = "\n".join([f"  {cls or '—'}: {cnt} o'quvchi" for cls, cnt in top_classes])
     top_text = "\n".join([f"  {n}: {cnt} yutuq" for n, cnt in top_students])
-
     data = {
         "Jami o'quvchilar": total_students,
         "Jami to'garaklar": total_clubs,
@@ -912,7 +865,6 @@ async def report_general(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Top o'quvchilar (yutuq)": top_text,
         "Sana": datetime.now().strftime("%Y-%m-%d")
     }
-
     msg = await q.message.reply_text("⏳ Hisobot tayyorlanmoqda...")
     try:
         report = generate_report("UMUMIY MAKTAB", str(data))
@@ -1006,7 +958,6 @@ async def callback_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE
     q = update.callback_query
     data = q.data
 
-    # AI o'rgatish
     if data in TEACH_TEXTS:
         await q.answer()
         msg = await q.message.reply_text("🤔 AI o'ylamoqda...")
@@ -1017,16 +968,12 @@ async def callback_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE
             await msg.edit_text(f"❌ Xato: {e}")
         return
 
-    # ─── YANGI: Universitetlar callbacklari ───────────────────────────────────
     if data == "universities_info":
         return await universities_info_cb(update, context)
-
     if data.startswith("uni_sel_"):
         return await uni_selected_cb(update, context)
-
     if data == "uni_custom":
         return await uni_custom_cb(update, context)
-
     if data == "career_back":
         await q.answer()
         keyboard = [
@@ -1040,7 +987,6 @@ async def callback_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
-    # ─────────────────────────────────────────────────────────────────────────
 
     handlers = {
         "add_student": add_student_start,
@@ -1132,15 +1078,10 @@ async def main_menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await check_admin(update): return
     text = update.message.text
 
-    # Agar universitet qidirish rejimida bo'lsa
     if context.user_data.get("awaiting_uni_search"):
         return await uni_search_handler(update, context)
-
-    # Agar media qo'shish rejimida bo'lsa
     if context.user_data.get("target_student_id") and not text.startswith("/"):
         return await receive_media(update, context)
-
-    # Agar AI chat rejimida bo'lsa
     if context.user_data.get("ai_chat_mode") and not text.startswith("/"):
         return await ai_chat_handler(update, context)
 
@@ -1168,7 +1109,7 @@ async def main_menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── MAIN ──────────────────────────────────────────────────────────────────────
 async def main():
     init_db()
-    logger.info("🚀 Bot v5 ishga tushmoqda...")
+    logger.info("🚀 Bot v6 ishga tushmoqda...")
     app = Application.builder().token(BOT_TOKEN).build()
 
     conv = ConversationHandler(
@@ -1208,7 +1149,6 @@ async def main():
                 CallbackQueryHandler(member_sel_student, pattern="^msel_"),
             ],
             ADD_MEMBER_CLUB:   [CallbackQueryHandler(join_club, pattern="^mjoin_")],
-            # ─── YANGI: Universitet qidirish ───────────────────────────────
             UNI_SEARCH: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, uni_search_handler),
             ],
@@ -1226,7 +1166,7 @@ async def main():
     app.add_handler(CommandHandler("hisobot", lambda u, c: report_menu(u, c)))
     app.add_handler(CallbackQueryHandler(callback_dispatcher))
 
-    logger.info("✅ Bot v5 tayyor!")
+    logger.info("✅ Bot v6 tayyor!")
     async with app:
         await app.initialize()
         await app.start()
@@ -1236,3 +1176,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+ENDOFFILE
+echo "OK"
