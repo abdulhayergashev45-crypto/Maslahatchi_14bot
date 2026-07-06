@@ -391,12 +391,13 @@ async def student_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "SELECT cl.name FROM clubs cl JOIN club_members cm ON cl.id=cm.club_id WHERE cm.student_id=?",
         (sid,)).fetchall()]
     conn.close()
+    clubs_text = ', '.join(clubs) if clubs else '—'
     text = (
         f"👤 *{name}*\n"
         f"📚 Sinf: {cls or '—'}\n"
         f"📁 Ma'lumotlar: {mc} ta\n"
         f"🏆 Yutuqlar: {ac} ta\n"
-        f"🎭 To'garaklar: {', '.join(clubs) if clubs else '—'}"
+        f"🎭 To'garaklar: {clubs_text}"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     return MAIN_MENU
@@ -693,14 +694,16 @@ async def cb_student_profile(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "SELECT cl.name FROM clubs cl JOIN club_members cm ON cl.id=cm.club_id WHERE cm.student_id=?",
         (sid,)).fetchall()]
     conn.close()
-    text = (f"👤 *{name}* | 📚 {cls or '—'}\n"
-            f"{'🟢 Bot da ro\'yxatdan o\'tgan' if tgid else '⚪ Hali ro\'yxatdan o\'tmagan'}\n"
+    clubs_text = ', '.join(clubs) if clubs else '—'
+    online = '🟢 Botda royxatdan otgan' if tgid else '⚪ Royxatdan otmagan'
+    text = (f"👤 *{name}* | 📚 {cls or chr(8212)}\n"
+            f"{online}\n"
             f"📁 {mc} ta | 🏆 {ac} ta\n"
-            f"🎭 {', '.join(clubs) if clubs else '—'}")
+            f"🎭 {clubs_text}")
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📋 Portfel", callback_data=f"pf_{sid}"),
-         InlineKeyboardButton("📁 Ma'lumot", callback_data=f"am_{sid}")],
-        [InlineKeyboardButton("🏆 Yutuq qo'sh", callback_data=f"aa_{sid}")],
+         InlineKeyboardButton("📁 Ma\'lumot", callback_data=f"am_{sid}")],
+        [InlineKeyboardButton("🏆 Yutuq qo\'sh", callback_data=f"aa_{sid}")],
     ])
     await q.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
     return MAIN_MENU
