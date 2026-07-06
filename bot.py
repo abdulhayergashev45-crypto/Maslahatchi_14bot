@@ -203,6 +203,7 @@ def admin_kb():
         [KeyboardButton("🎭 To'garaklar"), KeyboardButton("🎯 Kasb yo'naltirish")],
         [KeyboardButton("📋 Portfel"), KeyboardButton("📝 MOCK test")],
         [KeyboardButton("📊 Hisobot"), KeyboardButton("📨 Murojaatlar")],
+        [KeyboardButton("📊 DTM Ballarni yangilash")],
     ], resize_keyboard=True, is_persistent=True)
 
 def student_kb():
@@ -215,7 +216,7 @@ def student_kb():
 MENU_ITEMS_ADMIN = {
     "👨‍🎓 O'quvchilar", "🏆 Yutuqlar", "🎭 To'garaklar",
     "🎯 Kasb yo'naltirish", "📋 Portfel", "📝 MOCK test",
-    "📊 Hisobot", "📨 Murojaatlar"
+    "📊 Hisobot", "📨 Murojaatlar", "📊 DTM Ballarni yangilash"
 }
 MENU_ITEMS_STUDENT = {
     "🎭 To'garaklar", "🏆 Mening yutuqlarim",
@@ -1648,6 +1649,7 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📝 MOCK test": admin_mock_menu,
             "📊 Hisobot": admin_report_menu,
             "📨 Murojaatlar": murojaatlar_admin,
+            "📊 DTM Ballarni yangilash": dtm_yangilash_cmd,
         }
     else:
         routes = {
@@ -1772,6 +1774,11 @@ async def main_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("tsid"):
         return await receive_media(update, context)
 
+    # DTM yangilash rejimi
+    if context.user_data.get("dtu_step") and is_admin(uid):
+        await dtu_input_handler(update, context)
+        return MAIN_MENU
+
     # AI rejim
     if context.user_data.get("ai_mode"):
         msg = await update.message.reply_text("🤔 AI o'ylamoqda...")
@@ -1784,6 +1791,7 @@ async def main_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── MAIN ──────────────────────────────────────────────────────
 async def main():
     init_db()
+    _load_dtm_updates()  # Saqlangan DTM yangilanishlarni yuklash
     logger.info("🚀 Bot v6 ishga tushmoqda...")
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -1850,6 +1858,7 @@ async def main():
     app.add_handler(CommandHandler("add_media", add_media_cmd))
     app.add_handler(CommandHandler("add_togarak", add_togarak_cmd))
     app.add_handler(CommandHandler("mock_yech", mock_yech_cmd))
+    app.add_handler(CommandHandler("dtm_yangilash", dtm_yangilash_cmd))
     app.add_handler(MessageHandler(
         filters.Document.ALL & filters.ChatType.PRIVATE, excel_upload_handler))
     app.add_handler(CallbackQueryHandler(cb_dispatch))
