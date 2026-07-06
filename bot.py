@@ -25,7 +25,8 @@ import sqlite3
 import io
 from datetime import datetime
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import openpyxl
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -42,7 +43,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_KEY")
 ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "123456789").split(",")))
 
-genai.configure(api_key=GEMINI_API_KEY)
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ─── STATES ────────────────────────────────────────────────────────────────────
 (
@@ -73,7 +74,7 @@ genai.configure(api_key=GEMINI_API_KEY)
     MOCK_YECHISH,
     # Murojaat
     MUROJAAT_TEXT,
-) = range(30)
+) = range(28)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO,
@@ -156,11 +157,15 @@ def db(): return sqlite3.connect(DB_PATH)
 # ─── GEMINI AI ─────────────────────────────────────────────────────────────────
 def gemini(prompt: str, system: str = "") -> str:
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=system or None
+        config = types.GenerateContentConfig(
+            system_instruction=system if system else None
         )
-        return model.generate_content(prompt).text
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=config
+        )
+        return response.text
     except Exception as e:
         logger.error(f"Gemini: {e}")
         return f"❌ AI xatosi: {e}"
