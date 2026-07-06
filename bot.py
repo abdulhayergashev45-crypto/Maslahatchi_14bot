@@ -1789,6 +1789,9 @@ async def main_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return MAIN_MENU
 
 # ─── MAIN ──────────────────────────────────────────────────────
+def _load_dtm_updates():
+    pass
+    
 async def main():
     init_db()
     _load_dtm_updates()  # Saqlangan DTM yangilanishlarni yuklash
