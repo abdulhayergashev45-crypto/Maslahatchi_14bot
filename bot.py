@@ -1779,6 +1779,11 @@ async def main_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await dtu_input_handler(update, context)
         return MAIN_MENU
 
+    # DTM yangilash rejimi
+    if context.user_data.get("dtu_step") and is_admin(uid):
+        await dtu_input_handler(update, context)
+        return MAIN_MENU
+
     # AI rejim
     if context.user_data.get("ai_mode"):
         msg = await update.message.reply_text("🤔 AI o'ylamoqda...")
@@ -1788,10 +1793,146 @@ async def main_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return MAIN_MENU
 
-# ─── MAIN ──────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════
+# DTM BALL YANGILASH TIZIMI (Admin)
+# ═══════════════════════════════════════════════════════════════
+
+async def dtm_yangilash_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await chk_admin(update): return
+    from dtm_base import DTM_BALLARI
+    conn = db()
+    conn.execute("""CREATE TABLE IF NOT EXISTS dtm_updates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        otm_id TEXT, yonalish TEXT,
+        old_grant INTEGER, old_kontrakt INTEGER,
+        grant_ball INTEGER, kontrakt_ball INTEGER,
+        narx REAL, yil INTEGER,
+        updated_at TEXT DEFAULT (datetime('now'))
+    )""")
+    conn.commit(); conn.close()
+    kb_rows = [[InlineKeyboardButton(
+        f"🏫 {otm_id} — {otm['city']}",
+        callback_data=f"dtu_otm_{otm_id}"
+    )] for otm_id, otm in DTM_BALLARI.items()]
+    kb_rows.append([InlineKeyboardButton("📋 O'zgarishlar tarixi", callback_data="dtu_history")])
+    await update.message.reply_text(
+        f"📊 *DTM BALL YANGILASH*\n📅 {datetime.now().year}-yil\n\nQaysi OTMni yangilamoqchisiz?",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(kb_rows))
+
+async def dtu_select_otm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    otm_id = q.data.replace("dtu_otm_", "")
+    from dtm_base import DTM_BALLARI
+    otm = DTM_BALLARI.get(otm_id)
+    if not otm: return
+    context.user_data["dtu_otm_id"] = otm_id
+    kb_rows = [[InlineKeyboardButton(
+        f"📚 {yon['nom']} | 🎓{yon['grant']} | 💳{yon['kontrakt']}",
+        callback_data=f"dtu_yon_{i}"
+    )] for i, yon in enumerate(otm["yonalishlar"])]
+    kb_rows.append([InlineKeyboardButton("◀️ Orqaga", callback_data="dtu_back")])
+    await q.message.reply_text(
+        f"🏫 *{otm['full_name']}*\n\nYo'nalishni tanlang:",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(kb_rows))
+
+async def dtu_select_yon(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    yon_idx = int(q.data.replace("dtu_yon_", ""))
+    otm_id = context.user_data["dtu_otm_id"]
+    from dtm_base import DTM_BALLARI
+    yon = DTM_BALLARI[otm_id]["yonalishlar"][yon_idx]
+    context.user_data["dtu_yon_idx"] = yon_idx
+    context.user_data["dtu_yon_name"] = yon["nom"]
+    context.user_data["dtu_step"] = "grant"
+    await q.message.reply_text(
+        f"📚 *{yon['nom']}*\n"
+        f"🎓 Grant: *{yon['grant']}* | 💳 Kontrakt: *{yon['kontrakt']}* | 💰 {yon['narx']} mln\n\n"
+        f"Yangi *GRANT* ballini kiriting:",
+        parse_mode=ParseMode.MARKDOWN)
+
+async def dtu_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text in MENU_ITEMS: return await handle_menu(update, context)
+    step = context.user_data.get("dtu_step")
+    if not step: return MAIN_MENU
+    try:
+        val = float(update.message.text.strip())
+    except:
+        await update.message.reply_text("❗ Faqat raqam kiriting:"); return
+    otm_id = context.user_data["dtu_otm_id"]
+    yon_idx = context.user_data["dtu_yon_idx"]
+    from dtm_base import DTM_BALLARI
+    yon = DTM_BALLARI[otm_id]["yonalishlar"][yon_idx]
+    if step == "grant":
+        context.user_data["dtu_new_grant"] = int(val)
+        context.user_data["dtu_step"] = "kontrakt"
+        await update.message.reply_text(
+            f"✅ Grant: *{int(val)}* ball\n\nYangi *KONTRAKT* ballini kiriting:",
+            parse_mode=ParseMode.MARKDOWN)
+    elif step == "kontrakt":
+        context.user_data["dtu_new_kontrakt"] = int(val)
+        context.user_data["dtu_step"] = "narx"
+        await update.message.reply_text(
+            f"✅ Kontrakt: *{int(val)}* ball\n\nYillik narxni kiriting _(mln so'm)_:",
+            parse_mode=ParseMode.MARKDOWN)
+    elif step == "narx":
+        new_grant = context.user_data["dtu_new_grant"]
+        new_kontrakt = context.user_data["dtu_new_kontrakt"]
+        old_grant = yon["grant"]; old_kontrakt = yon["kontrakt"]
+        yon["grant"] = new_grant
+        yon["kontrakt"] = new_kontrakt
+        yon["narx"] = val
+        conn = db()
+        conn.execute(
+            "INSERT INTO dtm_updates(otm_id,yonalish,old_grant,old_kontrakt,grant_ball,kontrakt_ball,narx,yil) VALUES(?,?,?,?,?,?,?,?)",
+            (otm_id, yon["nom"], old_grant, old_kontrakt, new_grant, new_kontrakt, val, datetime.now().year))
+        conn.commit(); conn.close()
+        import json
+        from dtm_base import DTM_BALLARI as DB
+        try:
+            with open("dtm_updates.json","w",encoding="utf-8") as f:
+                json.dump({"year":datetime.now().year,"data":{k:{"yonalishlar":v["yonalishlar"]} for k,v in DB.items()}},f,ensure_ascii=False,indent=2)
+        except: pass
+        context.user_data.pop("dtu_step",None)
+        await update.message.reply_text(
+            f"✅ *Yangilandi!*\n🏫 {DTM_BALLARI[otm_id]['full_name']}\n"
+            f"📚 {yon['nom']}\n"
+            f"🎓 {old_grant}→*{new_grant}* | 💳 {old_kontrakt}→*{new_kontrakt}* | 💰 {val} mln",
+            parse_mode=ParseMode.MARKDOWN, reply_markup=admin_kb())
+
+async def dtu_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    conn = db()
+    try:
+        rows = conn.execute(
+            "SELECT otm_id,yonalish,old_grant,grant_ball,old_kontrakt,kontrakt_ball,yil "
+            "FROM dtm_updates ORDER BY updated_at DESC LIMIT 15").fetchall()
+    except: rows = []
+    conn.close()
+    if not rows: await q.message.reply_text("📭 Tarix yo'q."); return
+    text = "📋 *DTM O'ZGARISHLAR TARIXI:*\n\n"
+    for otm_id, yon, og, ng, ok, nk, yil in rows:
+        arrow = "↑" if ng > og else "↓" if ng < og else "="
+        text += f"📅 *{yil}* | {otm_id} — {yon}\n   🎓 {og}→{ng}({arrow}) | 💳 {ok}→{nk}\n\n"
+    await q.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
 def _load_dtm_updates():
-    pass
-    
+    import json
+    try:
+        with open("dtm_updates.json","r",encoding="utf-8") as f:
+            data = json.load(f)
+        from dtm_base import DTM_BALLARI
+        for otm_id, otm_data in data.get("data",{}).items():
+            if otm_id in DTM_BALLARI:
+                DTM_BALLARI[otm_id]["yonalishlar"] = otm_data["yonalishlar"]
+        logger.info(f"✅ DTM yangilanishlar yuklandi ({data.get('year','?')}-yil)")
+    except FileNotFoundError: pass
+    except Exception as e: logger.error(f"DTM yuklashda xato: {e}")
+
+
+# ─── MAIN ──────────────────────────────────────────────────────
 async def main():
     init_db()
     _load_dtm_updates()  # Saqlangan DTM yangilanishlarni yuklash
@@ -1861,7 +2002,7 @@ async def main():
     app.add_handler(CommandHandler("add_media", add_media_cmd))
     app.add_handler(CommandHandler("add_togarak", add_togarak_cmd))
     app.add_handler(CommandHandler("mock_yech", mock_yech_cmd))
-   app.add_handler(CommandHandler("dtm_yangilash", lambda u,c: dtm_yangilash_start(u,c)))
+    app.add_handler(CommandHandler("dtm_yangilash", dtm_yangilash_cmd))
     app.add_handler(MessageHandler(
         filters.Document.ALL & filters.ChatType.PRIVATE, excel_upload_handler))
     app.add_handler(CallbackQueryHandler(cb_dispatch))
