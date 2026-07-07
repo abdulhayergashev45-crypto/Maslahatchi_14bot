@@ -202,20 +202,20 @@ FANLAR = [
 def find_universities(fan1: str, fan2: str, ball: int) -> dict:
     """
     Ikki fan va ball bo'yicha mos OTM va yo'nalishlarni topish
-    Returns: {"grant": [...], "kontrakt": [...], "mos_emas": [...]}
+    Qoida: yo'nalish fanlari TANLANGAN fanlar ichida bo'lishi kerak
     """
     grant_mos = []
     kontrakt_mos = []
     
-    # Fanlar kombinatsiyasi (ikki variant)
-    combo1 = {fan1, fan2}
+    combo = {fan1, fan2}
     
     for otm_id, otm in DTM_BALLARI.items():
         for yon in otm["yonalishlar"]:
             yon_fanlar = set(yon["fanlar"])
             
-            # Fan mos kelishini tekshirish (kamida 1 fan mos bo'lsa)
-            if not (yon_fanlar & combo1):
+            # Yo'nalish fanlari tanlangan fanlar ichida to'liq bo'lishi kerak
+            # Masalan: yo'nalish [Matematika, Fizika] → foydalanuvchi ham Matematika+Fizika tanlagan bo'lsin
+            if not yon_fanlar.issubset(combo):
                 continue
             
             item = {
