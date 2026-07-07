@@ -1861,7 +1861,7 @@ async def main():
     app.add_handler(CommandHandler("add_media", add_media_cmd))
     app.add_handler(CommandHandler("add_togarak", add_togarak_cmd))
     app.add_handler(CommandHandler("mock_yech", mock_yech_cmd))
-    app.add_handler(CommandHandler("dtm_yangilash", dtm_yangilash_cmd))
+   app.add_handler(CommandHandler("dtm_yangilash", lambda u,c: dtm_yangilash_start(u,c)))
     app.add_handler(MessageHandler(
         filters.Document.ALL & filters.ChatType.PRIVATE, excel_upload_handler))
     app.add_handler(CallbackQueryHandler(cb_dispatch))
