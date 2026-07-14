@@ -92,6 +92,10 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             full_name TEXT NOT NULL,
             class_name TEXT,
+            birth_date TEXT,
+            pinfl TEXT,
+            doc_series TEXT,
+            doc_number TEXT,
             telegram_id INTEGER UNIQUE,
             created_at TEXT DEFAULT (datetime('now'))
         );
@@ -274,9 +278,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["student_id"] = student[0]
         context.user_data["student_name"] = student[1]
         context.user_data["student_class"] = student[2]
+        # Sinf ma'lumotini bazadan yangilab olish
+        fresh_cls = db().execute(
+            "SELECT class_name FROM students WHERE id=?", (student[0],)
+        ).fetchone()
+        cls_display = (fresh_cls[0] if fresh_cls and fresh_cls[0] else "—")
+        
         await update.message.reply_text(
             f"👋 Qaytib keldingiz, *{student[1]}*!\n"
-            f"📚 Sinf: {student[2] or '—'}\n\n"
+            f"📚 Sinf: {cls_display}\n\n"
             f"Quyidagi menyudan foydalaning:",
             parse_mode=ParseMode.MARKDOWN, reply_markup=student_kb()
         )
@@ -306,18 +316,20 @@ async def reg_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return REG_CLASS
 
 async def reg_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text in MENU_ITEMS:
+        return await handle_menu(update, context)
     cls = update.message.text.strip()
     name = context.user_data["reg_name"]
     uid = update.effective_user.id
 
     conn = db(); c = conn.cursor()
-    # Bazada shu ism bor-yo'qligini tekshirish
+    # Bazada shu ism bor-yo'qligini tekshirish (ism bo'yicha)
     existing = c.execute(
         "SELECT id FROM students WHERE full_name=?", (name,)
     ).fetchone()
 
     if existing:
-        # Mavjud o'quvchiga telegram_id ni bog'lash
+        # Mavjud o'quvchiga telegram_id va sinf yangilash
         c.execute("UPDATE students SET telegram_id=?, class_name=? WHERE id=?",
                   (uid, cls, existing[0]))
         sid = existing[0]
@@ -332,10 +344,14 @@ async def reg_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["student_name"] = name
     context.user_data["student_class"] = cls
 
+    # Sinf bazaga yozilganini tekshirish
+    saved = db().execute("SELECT class_name FROM students WHERE id=?", (sid,)).fetchone()
+    saved_cls = saved[0] if saved and saved[0] else cls
+
     await update.message.reply_text(
         f"✅ *Ro'yxatdan o'tdingiz!*\n\n"
         f"👤 Ism: *{name}*\n"
-        f"📚 Sinf: *{cls}*\n\n"
+        f"📚 Sinf: *{saved_cls}*\n\n"
         f"Endi botdan foydalanishingiz mumkin! 🎉",
         parse_mode=ParseMode.MARKDOWN, reply_markup=student_kb()
     )
@@ -398,12 +414,22 @@ async def student_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         (sid,)).fetchall()]
     conn.close()
     clubs_text = ', '.join(clubs) if clubs else '—'
+    # Yangi ma'lumotlarni bazadan olish
+    fresh = db().execute(
+        "SELECT class_name, birth_date, pinfl FROM students WHERE id=?", (sid,)
+    ).fetchone()
+    cls_show = (fresh[0] if fresh and fresh[0] else cls) or "—"
+    birth_show = fresh[1] if fresh and fresh[1] else "—"
+    pinfl_show = fresh[2] if fresh and fresh[2] else "—"
+
     text = (
         f"👤 *{name}*\n"
-        f"📚 Sinf: {cls or '—'}\n"
+        f"📚 Sinf: *{cls_show}*\n"
+        f"🎂 Tug'ilgan: {birth_show}\n"
+        f"🆔 PINFL: `{pinfl_show}`\n"
         f"📁 Ma'lumotlar: {mc} ta\n"
         f"🏆 Yutuqlar: {ac} ta\n"
-        f"🎭 To'garaklar: {clubs_text}"
+        f"🎭 {clubs_text}"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     return MAIN_MENU
@@ -701,8 +727,17 @@ async def cb_student_profile(update: Update, context: ContextTypes.DEFAULT_TYPE)
         (sid,)).fetchall()]
     conn.close()
     clubs_text = ', '.join(clubs) if clubs else '—'
-    online = '🟢 Botda royxatdan otgan' if tgid else '⚪ Royxatdan otmagan'
-    text = (f"👤 *{name}* | 📚 {cls or chr(8212)}\n"
+    online = "🟢 Botda ro'yxatdan o'tgan" if tgid else "⚪ Ro'yxatdan o'tmagan"
+    # Qo'shimcha ma'lumotlar
+    extra = db().execute(
+        "SELECT birth_date, pinfl FROM students WHERE id=?", (sid,)
+    ).fetchone()
+    birth_show = extra[0] if extra and extra[0] else "—"
+    pinfl_show = extra[1] if extra and extra[1] else "—"
+    
+    text = (f"👤 *{name}*\n"
+            f"📚 Sinf: {cls or '—'} | 🎂 {birth_show}\n"
+            f"🆔 PINFL: `{pinfl_show}`\n"
             f"{online}\n"
             f"📁 {mc} ta | 🏆 {ac} ta\n"
             f"🎭 {clubs_text}")
