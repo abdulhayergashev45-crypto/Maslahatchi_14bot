@@ -1615,56 +1615,90 @@ async def otm_list_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── EXCEL YUKLASH ─────────────────────────────────────────────
 async def excel_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id): return
-    doc = update.message.document
-    if not doc or not (doc.file_name or "").endswith((".xlsx", ".xls")): return
-    msg = await update.message.reply_text("📊 Excel o'qilmoqda...")
+    """Excel faylni qabul qilish - har qanday state dan ishlaydi"""
     try:
+        if not update.message or not update.message.document:
+            return
+        doc = update.message.document
+        fname = doc.file_name or ""
+        if not (fname.lower().endswith(".xlsx") or fname.lower().endswith(".xls") or
+                "spreadsheet" in (doc.mime_type or "")):
+            return
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("⛔ Faqat maslahatchi Excel yuklashi mumkin.")
+            return
+        msg = await update.message.reply_text("📊 Excel o'qilmoqda... ⏳")
         file = await doc.get_file()
         file_bytes = await file.download_as_bytearray()
         wb = openpyxl.load_workbook(io.BytesIO(bytes(file_bytes)))
         ws = wb.active
+
         headers = [str(cell.value or "").strip().lower() for cell in ws[1]]
-        name_idx = 0
-        class_idx = None
+        name_idx = birth_idx = pinfl_idx = series_idx = docnum_idx = class_idx = None
         for i, h in enumerate(headers):
-            if any(x in h for x in ["полное наим", "full_name", "ism", "f.i.o", "фамилия"]):
+            if any(x in h for x in ["полное наим", "full_name", "ism", "f.i.o"]):
                 name_idx = i
-            if any(x in h for x in ["класс", "sinf", "class", "klass"]):
+            elif any(x in h for x in ["дата рожд", "tug'ilgan", "birth"]):
+                birth_idx = i
+            elif any(x in h for x in ["пинфл", "pinfl"]):
+                pinfl_idx = i
+            elif any(x in h for x in ["серия", "seria", "doc_series"]):
+                series_idx = i
+            elif any(x in h for x in ["номер докум", "doc_number", "hujjat"]):
+                docnum_idx = i
+            elif any(x in h for x in ["класс", "sinf", "class", "klass"]):
                 class_idx = i
+
+        if name_idx is None:
+            name_idx = 0
+
         conn = db(); c = conn.cursor()
-        added = skipped = duplicates = 0
-        last_row = 1
-        for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
-            last_row = row_num
-            if not row or not row[name_idx]: skipped += 1; continue
+        # Yangi ustunlarni qo'shish
+        for col in ["birth_date", "pinfl", "doc_series", "doc_number"]:
+            try:
+                c.execute(f"ALTER TABLE students ADD COLUMN {col} TEXT")
+                conn.commit()
+            except: pass
+
+        added = updated = skipped = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or not row[name_idx]:
+                skipped += 1; continue
             name = str(row[name_idx]).strip()
-            if len(name) < 3: skipped += 1; continue
-            cls = ""
-            if class_idx is not None and class_idx < len(row) and row[class_idx]:
-                cls = str(row[class_idx]).strip()
-            if not cls:
-                # F/G ustunidan sinf qidirish
-                for i, h in enumerate(headers):
-                    if any(x in h for x in ["klass", "класс", "sinf"]) and i < len(row) and row[i]:
-                        raw = str(row[i])
-                        for part in raw.split():
-                            if len(part) <= 4 and any(c2.isdigit() for c2 in part):
-                                cls = part; break
-                        break
-            if conn.execute("SELECT id FROM students WHERE full_name=?", (name,)).fetchone():
-                duplicates += 1; continue
-            c.execute("INSERT INTO students(full_name,class_name) VALUES(?,?)", (name, cls))
-            added += 1
+            if len(name) < 3:
+                skipped += 1; continue
+
+            cls = str(row[class_idx]).strip() if class_idx is not None and class_idx < len(row) and row[class_idx] else ""
+            birth = ""
+            if birth_idx is not None and birth_idx < len(row) and row[birth_idx]:
+                bval = row[birth_idx]
+                birth = bval.strftime("%d.%m.%Y") if hasattr(bval, "strftime") else str(bval).strip()
+            pinfl = str(row[pinfl_idx]).strip() if pinfl_idx is not None and pinfl_idx < len(row) and row[pinfl_idx] else ""
+            series = str(row[series_idx]).strip() if series_idx is not None and series_idx < len(row) and row[series_idx] else ""
+            docnum = str(row[docnum_idx]).strip() if docnum_idx is not None and docnum_idx < len(row) and row[docnum_idx] else ""
+
+            existing = conn.execute("SELECT id FROM students WHERE full_name=?", (name,)).fetchone()
+            if existing:
+                c.execute("UPDATE students SET class_name=?, birth_date=?, pinfl=?, doc_series=?, doc_number=? WHERE id=?",
+                          (cls, birth, pinfl, series, docnum, existing[0]))
+                updated += 1
+            else:
+                c.execute("INSERT INTO students(full_name,class_name,birth_date,pinfl,doc_series,doc_number) VALUES(?,?,?,?,?,?)",
+                          (name, cls, birth, pinfl, series, docnum))
+                added += 1
+
         conn.commit(); conn.close()
         await msg.edit_text(
             f"✅ *Excel yuklandi!*\n\n"
-            f"✅ Qo'shildi: *{added}* ta\n"
-            f"🔁 Takror: {duplicates} ta\n"
+            f"✅ Yangi: *{added}* ta\n"
+            f"🔄 Yangilandi: *{updated}* ta\n"
             f"⚠️ Bo'sh: {skipped} ta",
             parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
-        await msg.edit_text(f"❌ Xato: {e}")
+        logger.error(f"Excel handler xato: {e}")
+        try:
+            await update.message.reply_text(f"❌ Xato: {str(e)[:300]}")
+        except: pass
 
 # ─── HANDLE MENU HELPER ────────────────────────────────────────
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1978,6 +2012,8 @@ async def main():
         entry_points=[CommandHandler("start", start)],
         states={
             MAIN_MENU: [
+                MessageHandler(filters.Document.MimeType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") & filters.ChatType.PRIVATE, excel_upload_handler),
+                MessageHandler(filters.Document.FileExtension("xlsx") & filters.ChatType.PRIVATE, excel_upload_handler),
                 MessageHandler(filters.ALL & ~filters.COMMAND, main_router),
                 CallbackQueryHandler(cb_dispatch),
             ],
@@ -1989,6 +2025,8 @@ async def main():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_media),
                 MessageHandler(filters.PHOTO, receive_media),
                 MessageHandler(filters.VIDEO, receive_media),
+                MessageHandler(filters.Document.MimeType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), excel_upload_handler),
+                MessageHandler(filters.Document.FileExtension("xlsx"), excel_upload_handler),
                 MessageHandler(filters.Document.ALL, receive_media),
                 CommandHandler("done", done_cmd),
             ],
@@ -2033,13 +2071,18 @@ async def main():
         allow_reentry=True,
     )
 
+    # Excel handler - ConversationHandler dan OLDIN, har qanday holatda ishlaydi
+    app.add_handler(MessageHandler(
+        filters.Document.ALL & filters.ChatType.PRIVATE,
+        excel_upload_handler
+    ), group=0)
+    
     app.add_handler(conv)
     app.add_handler(CommandHandler("add_media", add_media_cmd))
     app.add_handler(CommandHandler("add_togarak", add_togarak_cmd))
     app.add_handler(CommandHandler("mock_yech", mock_yech_cmd))
     app.add_handler(CommandHandler("dtm_yangilash", dtm_yangilash_cmd))
-    app.add_handler(MessageHandler(
-        filters.Document.ALL & filters.ChatType.PRIVATE, excel_upload_handler))
+    # Document handler yuqorida group=0 da qo'shildi
     app.add_handler(CallbackQueryHandler(cb_dispatch))
 
     logger.info("✅ Bot v6 tayyor!")
