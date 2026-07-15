@@ -1633,7 +1633,21 @@ async def excel_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         wb = openpyxl.load_workbook(io.BytesIO(bytes(file_bytes)))
         ws = wb.active
 
-        headers = [str(cell.value or "").strip().lower() for cell in ws[1]]
+        # Sarlavha qatorini avtomatik topish (1-10 qatorlar ichida)
+        header_row = 1
+        headers = []
+        for row_num in range(1, 15):
+            row_data = [cell.value for cell in list(ws.iter_rows(min_row=row_num, max_row=row_num))[0]]
+            row_str = [str(v or "").strip().lower() for v in row_data]
+            # Sarlavha qatorini topish - "полное" yoki "ism" yoki "full_name" so'zi bor qator
+            if any(any(x in h for x in ["полное", "ism", "full_name", "f.i.o", "фамилия"]) for h in row_str):
+                headers = row_str
+                header_row = row_num
+                break
+        if not headers:
+            headers = [str(cell.value or "").strip().lower() for cell in ws[1]]
+            header_row = 1
+        logger.info(f"Sarlavha {header_row}-qatorda topildi: {headers}")
         name_idx = birth_idx = pinfl_idx = series_idx = docnum_idx = class_idx = None
         for i, h in enumerate(headers):
             if any(x in h for x in ["полное наим", "full_name", "ism", "f.i.o"]):
@@ -1661,7 +1675,7 @@ async def excel_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             except: pass
 
         added = updated = skipped = 0
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row in ws.iter_rows(min_row=header_row+1, values_only=True):
             if not row or not row[name_idx]:
                 skipped += 1; continue
             name = str(row[name_idx]).strip()
