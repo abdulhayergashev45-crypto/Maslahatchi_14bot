@@ -1714,6 +1714,23 @@ async def excel_upload_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text(f"❌ Xato: {str(e)[:300]}")
         except: pass
 
+# ─── EXCEL / TEACH_CAREER CALLBACK YORDAMCHILARI ────────────────
+async def cb_excel_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    await update.callback_query.message.reply_text(
+        "📥 *Excel yuklash:*\n\nExcel (.xlsx) faylni shu chatga yuboring.\n"
+        "Bot avtomatik barcha o'quvchilarni qo'shadi.\n\n"
+        "*Ustunlar:* A=Ism, G=Sinf",
+        parse_mode=ParseMode.MARKDOWN)
+    return MAIN_MENU
+
+async def cb_teach_career(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    await update.callback_query.message.reply_text(
+        gemini("Kasb tanlashda o'quvchilarga qanday yordam berish kerak? Qisqa maslahat.",
+               "Siz maktab maslahatchisisiz. O'zbek tilida javob bering."))
+    return MAIN_MENU
+
 # ─── HANDLE MENU HELPER ────────────────────────────────────────
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -1771,20 +1788,8 @@ async def cb_dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "rep_general": cb_rep_general,
         "rep_clubs": cb_rep_clubs,
         "rep_ach": cb_rep_ach,
-        "excel_help": lambda u,c: (
-            u.callback_query.answer(),
-            u.callback_query.message.reply_text(
-                "📥 *Excel yuklash:*\n\nExcel (.xlsx) faylni shu chatga yuboring.\n"
-                "Bot avtomatik barcha o'quvchilarni qo'shadi.\n\n"
-                "*Ustunlar:* A=Ism, G=Sinf",
-                parse_mode=ParseMode.MARKDOWN)
-        )[1],
-        "teach_career": lambda u,c: (
-            u.callback_query.answer(),
-            u.callback_query.message.reply_text(
-                gemini("Kasb tanlashda o'quvchilarga qanday yordam berish kerak? Qisqa maslahat.",
-                       "Siz maktab maslahatchisisiz. O'zbek tilida javob bering."))
-        )[1],
+        "excel_help": cb_excel_help,
+        "teach_career": cb_teach_career,
     }
 
     for key, handler in simple.items():
