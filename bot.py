@@ -21,8 +21,10 @@ O'QUVCHI:
 import asyncio
 import logging
 import os
+import re
 import sqlite3
 import io
+import unicodedata
 from datetime import datetime
 
 from google import genai
@@ -214,12 +216,22 @@ _CYR_TO_LAT = {
 def canon(text: str) -> str:
     """Matnni qidiruv uchun bitta umumiy (lotin, kichik harf, apostrofsiz)
     ko'rinishga keltiradi. Kirill va lotin yozuvlaridagi bir xil ismlar
-    shu funksiyadan o'tgandan keyin bir xil satrga aylanadi."""
+    shu funksiyadan o'tgandan keyin bir xil satrga aylanadi.
+    Excel'dan yoki qo'lda kiritilgan matnlardagi Unicode normalizatsiya
+    farqlari, maxsus bo'shliqlar (nbsp, zero-width) va ortiqcha probellar
+    ham shu yerda tozalanadi."""
     if not text:
         return ""
+    # Unicode normalizatsiya — bir xil ko'ringan, lekin turli kod nuqtali
+    # belgilarni bitta shaklga keltiradi
+    text = unicodedata.normalize("NFKC", text)
+    # Yashirin/maxsus bo'shliq belgilarini oddiy probelga aylantirish
+    text = text.replace("\u00A0", " ").replace("\u200b", "").replace("\ufeff", "")
     text = text.lower()
-    for ch in ("ʻ", "'", "’", "‘", "`"):
+    for ch in ("ʻ", "'", "’", "‘", "`", "-", "."):
         text = text.replace(ch, "")
+    # Ortiqcha probellarni yig'ish
+    text = re.sub(r"\s+", " ", text).strip()
     return "".join(_CYR_TO_LAT.get(ch, ch) for ch in text)
 
 def _students_all():
