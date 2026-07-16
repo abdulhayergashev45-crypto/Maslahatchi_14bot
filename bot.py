@@ -200,6 +200,59 @@ def ai_guide(question, menu=""):
     return gemini(question,
         f"Siz maktab maslahatchisi botining yordamchisisiz. O'zbek tilida qisqa javob bering. Menyu: {menu}")
 
+# ─── LOTIN ↔ KIRILL QIDIRUV (transliteratsiya) ─────────────────────────────────
+# Kirill harflarni lotin ekvivalentiga o'giradi, shunda "Nurmuhammad" deb
+# qidirilganda "Нурмухаммад" ham topiladi (va aksincha).
+_CYR_TO_LAT = {
+    'а':'a','б':'b','в':'v','г':'g','ғ':'g','д':'d','е':'e','ё':'yo',
+    'ж':'j','з':'z','и':'i','й':'y','к':'k','қ':'q','л':'l','м':'m',
+    'н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f',
+    'х':'x','ц':'ts','ч':'ch','ш':'sh','щ':'sht','ъ':'','ы':'i','ь':'',
+    'э':'e','ю':'yu','я':'ya','ў':'o','ҳ':'h',
+}
+
+def canon(text: str) -> str:
+    """Matnni qidiruv uchun bitta umumiy (lotin, kichik harf, apostrofsiz)
+    ko'rinishga keltiradi. Kirill va lotin yozuvlaridagi bir xil ismlar
+    shu funksiyadan o'tgandan keyin bir xil satrga aylanadi."""
+    if not text:
+        return ""
+    text = text.lower()
+    for ch in ("ʻ", "'", "’", "‘", "`"):
+        text = text.replace(ch, "")
+    return "".join(_CYR_TO_LAT.get(ch, ch) for ch in text)
+
+def _students_all():
+    conn = db()
+    rows = conn.execute("SELECT id, full_name, class_name FROM students").fetchall()
+    conn.close()
+    return rows
+
+def find_students_fuzzy(query: str, limit: int = 10):
+    """Lotin yoki kirill, katta/kichik harfsiz qidiruv. So'rov o'quvchi
+    ismining istalgan qismiga mos kelsa, natijaga qo'shiladi."""
+    q = canon(query.strip())
+    if not q:
+        return []
+    results = []
+    for sid, name, cls in _students_all():
+        if q in canon(name):
+            results.append((sid, name, cls))
+            if len(results) >= limit:
+                break
+    return results
+
+def find_student_exact_canon(name: str):
+    """Ro'yxatdan o'tishda bir xil ismni lotin/kirill farqidan qat'iy nazar
+    aniqlash uchun — dublikat yozuvlar hosil bo'lishining oldini oladi."""
+    q = canon(name)
+    if not q:
+        return None
+    for sid, ex_name, cls in _students_all():
+        if canon(ex_name) == q:
+            return sid
+    return None
+
 # ─── KLAVIATURALAR ─────────────────────────────────────────────────────────────
 def admin_kb():
     return ReplyKeyboardMarkup([
@@ -322,17 +375,15 @@ async def reg_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = context.user_data["reg_name"]
     uid = update.effective_user.id
 
-    conn = db(); c = conn.cursor()
-    # Bazada shu ism bor-yo'qligini tekshirish (ism bo'yicha)
-    existing = c.execute(
-        "SELECT id FROM students WHERE full_name=?", (name,)
-    ).fetchone()
+    # Bazada shu ism bor-yo'qligini tekshirish (lotin/kirill farqidan qat'iy nazar)
+    existing_id = find_student_exact_canon(name)
 
-    if existing:
+    conn = db(); c = conn.cursor()
+    if existing_id:
         # Mavjud o'quvchiga telegram_id va sinf yangilash
         c.execute("UPDATE students SET telegram_id=?, class_name=? WHERE id=?",
-                  (uid, cls, existing[0]))
-        sid = existing[0]
+                  (uid, cls, existing_id))
+        sid = existing_id
     else:
         # Yangi o'quvchi qo'shish
         c.execute("INSERT INTO students (full_name, class_name, telegram_id) VALUES(?,?,?)",
@@ -664,11 +715,19 @@ async def s_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def s_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text in MENU_ITEMS: return await handle_menu(update, context)
     name = context.user_data["sname"]; cls = update.message.text.strip()
+    existing_id = find_student_exact_canon(name)
     conn = db(); c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO students (full_name,class_name) VALUES(?,?)", (name, cls))
-    sid = c.lastrowid; conn.commit(); conn.close()
+    if existing_id:
+        c.execute("UPDATE students SET class_name=? WHERE id=?", (cls, existing_id))
+        sid = existing_id
+        note = "🔄 Mavjud yozuv yangilandi (lotin/kirill bir xil ism topildi)"
+    else:
+        c.execute("INSERT INTO students (full_name,class_name) VALUES(?,?)", (name, cls))
+        sid = c.lastrowid
+        note = "✅ Yangi o'quvchi qo'shildi"
+    conn.commit(); conn.close()
     await update.message.reply_text(
-        f"✅ *{name}* ({cls}) qo'shildi! 🆔 ID: `{sid}`\n\n"
+        f"{note}\n👤 *{name}* ({cls}) — 🆔 ID: `{sid}`\n\n"
         f"Ma'lumot qo'shish: `/add_media {sid}`",
         parse_mode=ParseMode.MARKDOWN, reply_markup=admin_kb())
     return MAIN_MENU
@@ -681,11 +740,14 @@ async def cb_srch_student(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def s_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text in MENU_ITEMS: return await handle_menu(update, context)
     search = update.message.text.strip()
-    conn = db()
-    rows = conn.execute(
-        "SELECT id,full_name,class_name FROM students WHERE full_name LIKE ? OR class_name LIKE ? LIMIT 10",
-        (f"%{search}%", f"%{search}%")).fetchall()
-    conn.close()
+    rows = find_students_fuzzy(search, limit=10)
+    if not rows:
+        # Sinf bo'yicha ham qidirib ko'ramiz (lotin/kirill sinf nomlari uchun ham)
+        conn = db()
+        rows = conn.execute(
+            "SELECT id,full_name,class_name FROM students WHERE class_name LIKE ? LIMIT 10",
+            (f"%{search}%",)).fetchall()
+        conn.close()
     if not rows:
         await update.message.reply_text("❌ Topilmadi.", reply_markup=admin_kb())
         return MAIN_MENU
@@ -820,11 +882,7 @@ async def cb_add_ach(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def a_student(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text in MENU_ITEMS: return await handle_menu(update, context)
-    conn = db()
-    rows = conn.execute(
-        "SELECT id,full_name,class_name FROM students WHERE full_name LIKE ? LIMIT 5",
-        (f"%{update.message.text.strip()}%",)).fetchall()
-    conn.close()
+    rows = find_students_fuzzy(update.message.text.strip(), limit=5)
     if not rows:
         await update.message.reply_text("❌ Topilmadi:"); return A_STUDENT
     if len(rows) == 1:
@@ -1021,13 +1079,16 @@ async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = db()
     if text.isdigit():
         s = conn.execute("SELECT id,full_name,class_name FROM students WHERE id=?", (int(text),)).fetchone()
+        conn.close()
     else:
-        s = conn.execute("SELECT id,full_name,class_name FROM students WHERE full_name LIKE ? LIMIT 1",
-                         (f"%{text}%",)).fetchone()
+        conn.close()
+        matches = find_students_fuzzy(text, limit=1)
+        s = matches[0] if matches else None
     if not s:
         await update.message.reply_text("❌ Topilmadi. Qayta kiriting:")
-        conn.close(); return PORTFOLIO
+        return PORTFOLIO
     sid, sname, cls = s
+    conn = db()
     media = conn.execute(
         "SELECT media_type,content,caption,added_at FROM student_media WHERE student_id=? ORDER BY added_at",
         (sid,)).fetchall()
